@@ -59,6 +59,7 @@ public class PutFileFromTemplate extends AbstractProcessor {
             .Builder().name("Template Path")
             .description("Jinja2 Template Path")
             .required(false)
+            .expressionLanguageSupported(true)
             .addValidator(StandardValidators.FILE_EXISTS_VALIDATOR)
             .build();
 
@@ -152,7 +153,7 @@ public class PutFileFromTemplate extends AbstractProcessor {
     }
 
     String getTemplate(final ProcessContext context) throws IOException {
-        String templateFilePath = context.getProperty(TEMPLATE_PATH_PROPERTY).getValue();
+        String templateFilePath = context.getProperty(TEMPLATE_PATH_PROPERTY).evaluateAttributeExpressions().getValue();
 
         if (templateFilePath == null) {
             return context.getProperty(TEMPLATE_PROPERTY).getValue();
@@ -204,7 +205,7 @@ public class PutFileFromTemplate extends AbstractProcessor {
             return Paths.get(templateResourcesPath, fullName).toAbsolutePath().toString();
         }
 
-        String templateFilePath = context.getProperty(TEMPLATE_PATH_PROPERTY).getValue();
+        String templateFilePath = context.getProperty(TEMPLATE_PATH_PROPERTY).evaluateAttributeExpressions().getValue();
 
         if (templateFilePath == null) {
             return null;
