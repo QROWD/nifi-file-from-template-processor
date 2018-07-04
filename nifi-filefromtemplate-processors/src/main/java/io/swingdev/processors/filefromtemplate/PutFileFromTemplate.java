@@ -20,7 +20,7 @@ import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.Validator;
 import org.apache.nifi.flowfile.FlowFile;
-import org.apache.nifi.logging.ProcessorLog;
+import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.processor.*;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.io.InputStreamCallback;
@@ -246,7 +246,7 @@ public class PutFileFromTemplate extends AbstractProcessor {
 			return;
 		}
 
-        final ProcessorLog logger = getLogger();
+        final ComponentLog logger = getLogger();
 
         String template;
         try {
