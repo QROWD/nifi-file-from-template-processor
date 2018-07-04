@@ -152,8 +152,8 @@ public class PutFileFromTemplate extends AbstractProcessor {
         return templateContext;
     }
 
-    String getTemplate(final ProcessContext context) throws IOException {
-        String templateFilePath = context.getProperty(TEMPLATE_PATH_PROPERTY).evaluateAttributeExpressions().getValue();
+    String getTemplate(final ProcessContext context, final FlowFile flowFile) throws IOException {
+        String templateFilePath = context.getProperty(TEMPLATE_PATH_PROPERTY).evaluateAttributeExpressions(flowFile).getValue();
 
         if (templateFilePath == null) {
             return context.getProperty(TEMPLATE_PROPERTY).getValue();
@@ -251,7 +251,7 @@ public class PutFileFromTemplate extends AbstractProcessor {
 
         String template;
         try {
-            template = getTemplate(context);
+            template = getTemplate(context, flowFile);
         } catch (IOException e) {
             logger.error("Could not read the template file.");
             session.transfer(flowFile, FAILURE_RELATIONSHIP);
