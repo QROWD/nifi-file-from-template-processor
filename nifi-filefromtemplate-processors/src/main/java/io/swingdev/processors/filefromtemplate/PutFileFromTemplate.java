@@ -11,6 +11,7 @@ import com.hubspot.jinjava.interpret.FatalTemplateErrorsException;
 import com.hubspot.jinjava.interpret.JinjavaInterpreter;
 import com.hubspot.jinjava.loader.ResourceLocator;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 import org.apache.nifi.annotation.behavior.WritesAttribute;
 import org.apache.nifi.annotation.behavior.WritesAttributes;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
@@ -24,18 +25,22 @@ import org.apache.nifi.logging.ComponentLog;
 import org.apache.nifi.processor.*;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.io.InputStreamCallback;
+import org.apache.nifi.processor.io.OutputStreamCallback;
 import org.apache.nifi.processor.util.StandardValidators;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 @Tags({"template", "jinja", "json"})
-@CapabilityDescription("Creates a file by rendering a Jinja2 template with the FlowFile's attributes as the context.")
+@CapabilityDescription("Outputs a template with the FlowFile's attributes as the context.")
 @SeeAlso({})
 @WritesAttributes({@WritesAttribute(attribute="", description="")})
 public class PutFileFromTemplate extends AbstractProcessor {
@@ -70,30 +75,30 @@ public class PutFileFromTemplate extends AbstractProcessor {
             .addValidator(StandardValidators.FILE_EXISTS_VALIDATOR)
             .build();
 
-    public static final PropertyDescriptor FILE_PREFIX_PROPERTY = new PropertyDescriptor
-            .Builder().name("File Prefix")
-            .description("File Prefix.")
-            .defaultValue("rendered")
-            .required(true)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .build();
+    // public static final PropertyDescriptor FILE_PREFIX_PROPERTY = new PropertyDescriptor
+    //         .Builder().name("File Prefix")
+    //         .description("File Prefix.")
+    //         .defaultValue("rendered")
+    //         .required(true)
+    //         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+    //         .build();
 
-    public static final PropertyDescriptor FILE_SUFFIX_PROPERTY = new PropertyDescriptor
-            .Builder().name("File Suffix")
-            .description("File Suffix.")
-            .defaultValue(".out")
-            .required(true)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .build();
+    // public static final PropertyDescriptor FILE_SUFFIX_PROPERTY = new PropertyDescriptor
+    //         .Builder().name("File Suffix")
+    //         .description("File Suffix.")
+    //         .defaultValue(".out")
+    //         .required(true)
+    //         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+    //         .build();
 
-    public static final String DEFAULT_OUTPUT_PATH_SAVED_IN_ATTRIBUTE = "template.rendered.path";
-    public static final PropertyDescriptor OUTPUT_PATH_SAVED_IN_ATTRIBUTE_PROPERTY = new PropertyDescriptor
-            .Builder().name("Output Path attribute")
-            .description("Output Path will be saved in this attribute")
-            .required(true)
-            .defaultValue(DEFAULT_OUTPUT_PATH_SAVED_IN_ATTRIBUTE)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .build();
+    // public static final String DEFAULT_OUTPUT_PATH_SAVED_IN_ATTRIBUTE = "template.rendered.path";
+    // public static final PropertyDescriptor OUTPUT_PATH_SAVED_IN_ATTRIBUTE_PROPERTY = new PropertyDescriptor
+    //         .Builder().name("Output Path attribute")
+    //         .description("Output Path will be saved in this attribute")
+    //         .required(true)
+    //         .defaultValue(DEFAULT_OUTPUT_PATH_SAVED_IN_ATTRIBUTE)
+    //         .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+    //         .build();
 
     public static final Relationship SUCCESS_RELATIONSHIP = new Relationship.Builder()
             .name("success")
@@ -141,7 +146,7 @@ public class PutFileFromTemplate extends AbstractProcessor {
     Map<String, Object> templateContextFromFlowFile(final ProcessContext context, final ProcessSession session, final FlowFile flowFile) throws JsonParseException {
         Map<String, Object> templateContext = Maps.newHashMap();
 
-        templateContext.put("attributes", flowFile.getAttributes());
+        templateContext.putAll(flowFile.getAttributes());
 
         if (context.getProperty(PARSE_JSON_CONTENT_PROPERTY).asBoolean() == Boolean.TRUE && flowFile.getSize() > 0) {
             Map<String, Object> jsonContent = validateAndParseJSONContent(session, flowFile);
@@ -162,12 +167,12 @@ public class PutFileFromTemplate extends AbstractProcessor {
         }
     }
 
-    File createOutputFile(final ProcessContext context) throws IOException{
-        File tempFile = File.createTempFile(context.getProperty(FILE_PREFIX_PROPERTY).getValue(), context.getProperty(FILE_SUFFIX_PROPERTY).getValue());
-        tempFile.deleteOnExit();
+    // File createOutputFile(final ProcessContext context) throws IOException{
+    //     File tempFile = File.createTempFile(context.getProperty(FILE_PREFIX_PROPERTY).getValue(), context.getProperty(FILE_SUFFIX_PROPERTY).getValue());
+    //     tempFile.deleteOnExit();
 
-        return tempFile;
-    }
+    //     return tempFile;
+    // }
 
     @Override
     protected void init(final ProcessorInitializationContext context) {
@@ -176,9 +181,9 @@ public class PutFileFromTemplate extends AbstractProcessor {
         descriptors.add(TEMPLATE_RESOURCES_PATH_PROPERTY);
         descriptors.add(TEMPLATE_PATH_PROPERTY);
         descriptors.add(TEMPLATE_PROPERTY);
-        descriptors.add(FILE_PREFIX_PROPERTY);
-        descriptors.add(FILE_SUFFIX_PROPERTY);
-        descriptors.add(OUTPUT_PATH_SAVED_IN_ATTRIBUTE_PROPERTY);
+        // descriptors.add(FILE_PREFIX_PROPERTY);
+        // descriptors.add(FILE_SUFFIX_PROPERTY);
+        // descriptors.add(OUTPUT_PATH_SAVED_IN_ATTRIBUTE_PROPERTY);
         this.descriptors = Collections.unmodifiableList(descriptors);
 
         final Set<Relationship> relationships = new HashSet<Relationship>();
@@ -279,19 +284,28 @@ public class PutFileFromTemplate extends AbstractProcessor {
             return;
         }
 
-        File outputFile;
-        try {
-            outputFile = createOutputFile(context);
-            FileUtils.writeStringToFile(outputFile, renderedTemplate);
-        } catch (IOException e) {
-            logger.error("Could not create a temp. file.");
-            session.transfer(flowFile, FAILURE_RELATIONSHIP);
+        // File outputFile;
+        // try {
+        //     outputFile = createOutputFile(context);
+        //     FileUtils.writeStringToFile(outputFile, renderedTemplate);
+        // } catch (IOException e) {
+        //     logger.error("Could not create a temp. file.");
+        //     session.transfer(flowFile, FAILURE_RELATIONSHIP);
 
-            return;
-        }
+        //     return;
+        // }
 
-        flowFile = session.putAttribute(flowFile, context.getProperty(OUTPUT_PATH_SAVED_IN_ATTRIBUTE_PROPERTY).getValue(), outputFile.getAbsolutePath());
+        session.write(flowFile, new OutputStreamCallback() {
+            @Override
+            public void process(OutputStream out) throws IOException {
+                String renderedTemplate = jinjava.render(template, templateContext);
+                IOUtils.write(renderedTemplate, out, "UTF-8");
+            }
+        });
+
         session.transfer(flowFile, SUCCESS_RELATIONSHIP);
+        // flowFile = session.putAttribute(flowFile, context.getProperty(OUTPUT_PATH_SAVED_IN_ATTRIBUTE_PROPERTY).getValue(), outputFile.getAbsolutePath());
+        // session.transfer(flowFile, SUCCESS_RELATIONSHIP);
     }
 
 }
